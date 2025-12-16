@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         DOCKER_IMAGE = "abassinho/student-management:1.0"
-        DOCKERHUB_CREDENTIALS = "dockerhub-credentials-id" // Remplace par ton ID Jenkins pour Docker Hub
+        DOCKERHUB_CREDENTIALS = "dockerhub-credentials-id" // ID Jenkins pour Docker Hub
     }
 
     stages {
@@ -18,11 +18,9 @@ pipeline {
             steps {
                 echo 'Test stage: Exécution des tests unitaires'
                 script {
-                    // Exécuter les tests mais ne pas arrêter le pipeline en cas d'erreur
                     def result = sh(script: 'mvn test', returnStatus: true)
-                    
                     if (result != 0) {
-                        echo "Attention : des tests ont échoué, consultez target/surefire-reports"
+                        echo "Attention : certains tests ont échoué. Consultez target/surefire-reports"
                     }
                 }
             }
@@ -30,16 +28,15 @@ pipeline {
 
         stage('Post-Test') {
             steps {
-                echo 'Post-Test: Analyse des résultats et rapport'
-                // Copier les logs vers un dossier accessible dans Jenkins
-                sh 'cp -r target/surefire-reports $WORKSPACE/surefire-reports'
+                echo 'Post-Test: Analyse des résultats et copie des rapports'
+                sh 'cp -r target/surefire-reports $WORKSPACE/surefire-reports || true'
             }
         }
 
         stage('Docker Build') {
             steps {
                 echo 'Docker Build: Construction de l’image Docker'
-                sh "docker build -t ${DOCKER_IMAGE} ."
+                sh "docker build --pull -t ${DOCKER_IMAGE} ."
             }
         }
 
@@ -53,11 +50,24 @@ pipeline {
                 }
             }
         }
+
+        stage('Cleanup') {
+            steps {
+                echo 'Cleanup: Suppression de l’image Docker locale pour libérer de l’espace'
+                sh "docker rmi ${DOCKER_IMAGE} || true"
+            }
+        }
     }
 
     post {
         always {
             echo 'Pipeline terminé. Vérifiez les logs pour les tests et le push Docker.'
+        }
+        success {
+            echo 'Pipeline exécuté avec succès !'
+        }
+        failure {
+            echo 'Pipeline échoué. Consultez les logs pour identifier les erreurs.'
         }
     }
 }
