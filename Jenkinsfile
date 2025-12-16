@@ -51,7 +51,22 @@ pipeline {
             }
         }
 
-        stage('Cleanup') {
+        stage('Kubernetes Deploy') {
+            steps {
+                echo 'Déploiement sur Kubernetes'
+                script {
+                    // Appliquer les manifests MySQL et Spring Boot
+                    sh "kubectl apply -f student-k8s/mysql/"
+                    sh "kubectl apply -f student-k8s/springboot/"
+
+                    // Vérifier l’état des pods et des services
+                    sh 'kubectl get pods -o wide'
+                    sh 'kubectl get svc -o wide'
+                }
+            }
+        }
+
+        stage('Docker Cleanup') {
             steps {
                 echo 'Cleanup: Suppression de l’image Docker locale pour libérer de l’espace'
                 sh "docker rmi ${DOCKER_IMAGE} || true"
@@ -61,7 +76,7 @@ pipeline {
 
     post {
         always {
-            echo 'Pipeline terminé. Vérifiez les logs pour les tests et le push Docker.'
+            echo 'Pipeline terminé. Vérifiez les logs pour les tests, le push Docker et le déploiement Kubernetes.'
         }
         success {
             echo 'Pipeline exécuté avec succès !'

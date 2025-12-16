@@ -15,6 +15,7 @@ spec:
       containers:
       - name: student-management
         image: abassinho/student-management:1.0
+        imagePullPolicy: Always
         ports:
         - containerPort: 8080
         env:
@@ -26,6 +27,6 @@ spec:
           valueFrom:
             secretKeyRef:
               name: mysql-secret
-              key: rootpass
+              key: Rootpass2025!  # correspond au Secret que nous avons créé
         - name: SPRING_DATASOURCE_DRIVER_CLASS_NAME
           value: com.mysql.cj.jdbc.Driver
