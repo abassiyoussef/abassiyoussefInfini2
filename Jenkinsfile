@@ -3,66 +3,86 @@ pipeline {
 
     environment {
         DOCKER_IMAGE = "abassinho/student-management:1.0"
-        DOCKERHUB_CREDENTIALS = "dockerhub-credentials-id"
+        DOCKERHUB_CREDENTIALS = "dockerhub-credentials-id" // ID Jenkins pour Docker Hub
     }
 
     stages {
-
-        stage('Build Maven') {
+        stage('Build') {
             steps {
-                echo 'Compilation du projet'
-                sh 'mvn clean package -DskipTests'
+                echo 'Build stage: Compilation du projet'
+                sh 'mvn clean install -DskipTests=true'
             }
         }
 
-        stage('Tests') {
+        stage('Test') {
             steps {
-                echo 'Exécution des tests'
-                sh 'mvn test || true'
+                echo 'Test stage: Exécution des tests unitaires'
+                script {
+                    def result = sh(script: 'mvn test', returnStatus: true)
+                    if (result != 0) {
+                        echo "Attention : certains tests ont échoué. Consultez target/surefire-reports"
+                    }
+                }
+            }
+        }
+
+        stage('Post-Test') {
+            steps {
+                echo 'Post-Test: Analyse des résultats et copie des rapports'
+                sh 'cp -r target/surefire-reports $WORKSPACE/surefire-reports || true'
             }
         }
 
         stage('Docker Build') {
             steps {
-                echo 'Build image Docker'
-                sh "docker build -t ${DOCKER_IMAGE} ."
-            }
-        }
-
-        stage('Docker Login') {
-            steps {
-                echo 'Login Docker Hub'
-                withCredentials([usernamePassword(
-                    credentialsId: "${DOCKERHUB_CREDENTIALS}",
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
-                }
+                echo 'Docker Build: Construction de l’image Docker'
+                sh "docker build --pull -t ${DOCKER_IMAGE} ."
             }
         }
 
         stage('Docker Push') {
             steps {
-                echo 'Push image Docker'
-                sh "docker push ${DOCKER_IMAGE}"
+                echo 'Docker Push: Envoi de l’image sur Docker Hub'
+                script {
+                    docker.withRegistry('https://index.docker.io/v1/', "${DOCKERHUB_CREDENTIALS}") {
+                        sh "docker push ${DOCKER_IMAGE}"
+                    }
+                }
             }
         }
 
-        stage('Cleanup') {
+        stage('Kubernetes Deploy') {
             steps {
-                echo 'Nettoyage'
+                echo 'Déploiement sur Kubernetes'
+                script {
+                    // Appliquer les manifests MySQL et Spring Boot
+                    sh "kubectl apply -f student-k8s/mysql/"
+                    sh "kubectl apply -f student-k8s/springboot/"
+
+                    // Vérifier l’état des pods et des services
+                    sh 'kubectl get pods -o wide'
+                    sh 'kubectl get svc -o wide'
+                }
+            }
+        }
+
+        stage('Docker Cleanup') {
+            steps {
+                echo 'Cleanup: Suppression de l’image Docker locale pour libérer de l’espace'
                 sh "docker rmi ${DOCKER_IMAGE} || true"
             }
         }
     }
 
     post {
+        always {
+            echo 'Pipeline terminé. Vérifiez les logs pour les tests, le push Docker et le déploiement Kubernetes.'
+        }
         success {
-            echo 'Pipeline SUCCESS'
+            echo 'Pipeline exécuté avec succès !'
         }
         failure {
-            echo 'Pipeline FAILURE'
+            echo 'Pipeline échoué. Consultez les logs pour identifier les erreurs.'
         }
     }
 }
